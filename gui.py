@@ -2323,6 +2323,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 self, "SPCM", "Stop and delete this scan?\nNothing of it will be saved.") \
                 != QtWidgets.QMessageBox.StandardButton.Yes:
             return
+        if not self.worker:      # it finished (and was saved) while the question was open
+            self.statusBar().showMessage("The scan had already finished and is saved.")
+            return
         self._discard = True
         self.worker.stop()
         self.statusBar().showMessage("Stopping, the scan will be discarded…")
