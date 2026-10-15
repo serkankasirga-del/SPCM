@@ -962,11 +962,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.last_autofocus = result
 
     def _lockin_unit(self):
-        """'A' if the photocurrent SR830 uses its current input, else 'V'."""
+        """'A' if the photocurrent SR830 uses its current input, else 'V'.
+        While a scan runs, the value read before it started is used: the scan
+        thread owns the lock-ins then (two threads asking at once mix up the replies)."""
+        if self._busy():
+            return getattr(self, "_lockin_unit_now", "V")
         try:
-            return self.hw.lockin_pc.input_unit()
+            self._lockin_unit_now = self.hw.lockin_pc.input_unit()
         except Exception:
-            return "V"
+            self._lockin_unit_now = "V"
+        return self._lockin_unit_now
 
     def _amp_value(self):
         m = self.amp_mode.currentData()
@@ -1544,6 +1549,9 @@ class MainWindow(QtWidgets.QMainWindow):
             signal_as="peak")
 
     def refresh_lockins(self):
+        if self._busy():          # the running scan is reading the lock-ins
+            self.statusBar().showMessage("The lock-ins are read when the scan has finished.")
+            return
         try:
             self._poles_now = []
             for li, lab in ((self.hw.lockin_pc, self.li_pc), (self.hw.lockin_refl, self.li_r)):
@@ -1637,6 +1645,9 @@ class MainWindow(QtWidgets.QMainWindow):
                         label=f"({self.xc.value():.2f}, {self.yc.value():.2f}) µm")
 
     def centre_here(self):
+        if self._busy():
+            self.error("Wait until the scan / autofocus / calibration has finished.")
+            return
         try:
             x, y = self.hw.stage.position()
             self.set_origin(x, y)
@@ -1746,7 +1757,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "Check the step, then press Start scan.")
 
     def goto_stage(self, x, y, label="", mark=None):
-        if self.thread is not None:
+        if self._busy():
             return
         try:
             self.hw.stage.move_to(x, y)
@@ -1831,7 +1842,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def start_line(self, start_stage, end_stage):
         """Scan along a line between two stage positions (µm)."""
-        if self.thread is not None or getattr(self, "af_thread", None) is not None:
+        if self._busy():
             return
         import linescan
         try:
