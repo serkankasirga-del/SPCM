@@ -1932,6 +1932,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self._delete_scan_files(path)
             self.statusBar().showMessage("Line scan stopped and discarded (nothing saved)")
             return
+        if not os.path.exists(path):
+            self.statusBar().showMessage("Line scan stopped before it began - nothing saved")
+            return
         try:
             from scanner import update_experiment
             update_experiment(path, self.conditions(), self.exp_notes.toPlainText())
@@ -2416,6 +2419,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self._cleanup()
             self._delete_scan_files(path)
             self.statusBar().showMessage("Scan stopped and discarded (nothing saved)")
+            return
+        if not os.path.exists(path):   # stopped before anything was measured
+            self._cleanup()
+            self.statusBar().showMessage("Scan stopped before the first line - nothing saved")
             return
         try:   # include notes typed while the scan was running
             from scanner import update_experiment
