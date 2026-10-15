@@ -3,7 +3,7 @@ import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtWidgets
 
-from scanner import CHANNELS, signal_kind
+from scanner import CHANNELS, signal_kind, outer_name
 
 
 def _log_ticks(axis, vals):
@@ -180,8 +180,9 @@ class SweepView(QtWidgets.QWidget):
 
 
 class LineView(QtWidgets.QWidget):
-    """Line scans: signal and reflection vs distance (one curve per bias) and,
-    with several biases, the distance × bias image."""
+    """Line scans: signal and reflection vs distance (one curve per bias, laser
+    power or chopping frequency) and, with several values, the distance ×
+    parameter image."""
 
     def __init__(self):
         super().__init__()
@@ -226,26 +227,29 @@ class LineView(QtWidgets.QWidget):
         kind = signal_kind(s)
         sig, unit = linescan.signal(d, channel)
         dist, u, v = linescan.geometry(d)
-        nb = len(s.biases)
+        vals = s.outer_list()
+        pname, punit = outer_name(s)
+        nb = len(vals)
         cols = _colors(nb)
         self.sig.setLabel("left", f"{kind} {CHANNELS[channel]}", units=unit)
         self.sig.setTitle(f"{kind} along ({u[0]:.1f}, {v[0]:.1f}) → ({u[-1]:.1f}, "
                           f"{v[-1]:.1f}) µm")
-        for ib, b in enumerate(s.biases):
+        for ib, b in enumerate(vals):
             ok = np.isfinite(sig[ib])
             if not ok.any():
                 continue
             c = cols[ib]
             self.sig.plot(dist[ok], sig[ib][ok], pen=pg.mkPen(c, width=1.5), symbol="o",
                           symbolSize=4, symbolPen=None, symbolBrush=c,
-                          name=None if b is None else f"{b:g} V")
+                          name=None if b is None else f"{b:g} {punit}")
             r = d.refl[ib, 0, :, 2]
             okr = np.isfinite(r)
             self.refl.plot(dist[okr], r[okr], pen=pg.mkPen(c, width=1.2))
         multi = nb > 1
         self.map.setVisible(multi)
         if multi:
-            bx = np.array(s.biases, float)
+            bx = np.array(vals, float)
+            self.map.setLabel("left", f"{pname} ({punit})")
             order = np.argsort(bx)
             m = sig[order]
             if np.isfinite(m).any():
@@ -259,7 +263,7 @@ class LineView(QtWidgets.QWidget):
                 every = max(1, len(bs) // 10)
                 self.map.getAxis("left").setTicks(
                     [[(i, f"{b:g}") for i, b in enumerate(bs) if i % every == 0]])
-                self.map.setTitle(f"{kind}: distance × bias")
+                self.map.setTitle(f"{kind}: distance × {pname.split()[-1].lower()}")
         n = int(np.isfinite(sig).sum())
         self.info.setText(f"{n} of {sig.size} points  ·  {dist[-1]:.2f} µm, "
                           f"{len(dist)} points per line, step {s.step * 1000:.0f} nm")

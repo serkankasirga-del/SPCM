@@ -11,7 +11,7 @@ import os
 
 import numpy as np
 
-from scanner import pc_scale, signal_kind, CHANNELS
+from scanner import pc_scale, signal_kind, CHANNELS, outer_tag
 
 _PREFIX = ((1e-15, "f"), (1e-12, "p"), (1e-9, "n"), (1e-6, "µ"), (1e-3, "m"), (1, ""))
 
@@ -112,9 +112,9 @@ def save_all(d):
     """One PNG per map next to the .h5 file: <name>_map0.png, ..."""
     base = os.path.splitext(d.path)[0]
     out = []
-    for ib, b in enumerate(d.settings.biases):
+    for ib, b in enumerate(d.settings.outer_list()):
         if not np.isfinite(d.pc[ib, :, :, 0]).any():
             continue
-        suffix = f"_map{ib}" + ("" if b is None else f"_{b:+g}V")
+        suffix = f"_map{ib}" + outer_tag(d.settings, b)
         out.append(save_figure(d, ib, base + suffix + ".png"))
     return out

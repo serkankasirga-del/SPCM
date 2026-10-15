@@ -236,6 +236,26 @@ class SR830:
         self.inst.write(f"SLVL {v:.3f}")
         return v
 
+    # reference oscillator = chopping / modulation frequency of the laser.
+    # Only changed by a line scan that steps the frequency; put back afterwards.
+    def frequency(self):
+        return float(self.inst.query("FREQ?"))
+
+    def set_frequency(self, f):
+        """Internal reference frequency (Hz, 1 mHz - 102 kHz). -> frequency read back."""
+        if int(self.inst.query("FMOD?")) != 1:
+            raise RuntimeError(
+                f"{self.name} uses an EXTERNAL reference, so the program can't change its "
+                "frequency. Switch the lock-in whose SINE OUT drives the laser to INTERNAL "
+                "reference (Reference: Source = INTERNAL on the front panel).")
+        f = min(max(float(f), 0.001), 102000.0)
+        self.inst.write(f"FREQ {f:.5g}")
+        return self.frequency()
+
+    def reference_unlocked(self):
+        """True while the reference is (or was, since the last check) unlocked (LIAS bit 3)."""
+        return bool(int(self.inst.query("LIAS?")) & 0b1000)
+
     def close(self):
         self.inst.close()
 
@@ -364,6 +384,7 @@ class SimWorld:
     def __init__(self):
         self.x, self.y = 0.0, 0.0
         self.bias = 0.0
+        self.freq = 1000.0            # chopping frequency (Hz)
         self.rng = np.random.default_rng()
         self.laser_amp = 1.0          # lock-in sine output driving the laser (V)
         self.z = 100.0                # focus position (µm)
@@ -411,7 +432,10 @@ class SimWorld:
             self.flake(-4.5, y)
         contact_r = sum(spot(5, yy) for yy in np.linspace(-1, 4, 6)) * \
             self.flake(4.5, y)
-        pc = 2e-9 * (contact_l - 0.8 * contact_r)
+        # the contact signal is slow (rolls off above ~4 kHz chopping), the
+        # bias-driven term is fast
+        roll = 1 / np.sqrt(1 + (self.freq / 4000.0) ** 2)
+        pc = 2e-9 * (contact_l - 0.8 * contact_r) * roll
         pc += 1.5e-9 * self.bias * f * (1 - l - r)
         return pc
 
@@ -525,6 +549,17 @@ class SimSR830:
         v = round(min(max(v, 0.004), 5.0) / 0.002) * 0.002
         self.w.laser_amp = v
         return v
+
+    def frequency(self):
+        return self.w.freq
+
+    def set_frequency(self, f):
+        self.w.freq = float(f"{min(max(float(f), 0.001), 102000.0):.5g}")
+        self._unlock_until = time.time() + 0.2     # the other lock-in re-locks
+        return self.w.freq
+
+    def reference_unlocked(self):
+        return time.time() < getattr(self, "_unlock_until", 0)
 
     def close(self):
         pass

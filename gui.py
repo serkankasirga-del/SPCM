@@ -2365,8 +2365,9 @@ class MainWindow(QtWidgets.QMainWindow):
             p.set_axes(u, v)
         self.map_sel.blockSignals(True)
         self.map_sel.clear()
-        for b in d.settings.biases:
-            self.map_sel.addItem("single" if b is None else f"{b:g} V")
+        from scanner import outer_text
+        for b in d.settings.outer_list():
+            self.map_sel.addItem(outer_text(d.settings, b) or "single")
         self.map_sel.blockSignals(False)
         self.redraw()
 
@@ -2484,7 +2485,7 @@ class MainWindow(QtWidgets.QMainWindow):
         while os.path.exists(f"{base}_resolution_{k}.png"):
             k += 1
         title = (f"{os.path.basename(base)}: reflection {res['channel']}"
-                 + (f", map {res['map']}" if len(self.data.settings.biases) > 1 else ""))
+                 + (f", map {res['map']}" if len(self.data.settings.outer_list()) > 1 else ""))
         try:
             csv, png = resolution.export(res, f"{base}_resolution_{k}", title)
             self.statusBar().showMessage(f"Resolution saved: {png} and .csv")

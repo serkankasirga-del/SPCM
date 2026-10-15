@@ -95,6 +95,20 @@ class ScanSettings:
     signal_as: str = "peak"
     lockin_unit: str = "V"          # "A" when the SR830 current input is used
     scan_type: str = "map"          # "map", or "line" (one row along a drawn line)
+    # what changes from one map (or line) to the next:
+    #   "bias"      the biases list (V)
+    #   "power"     outer_values = laser power on the sample (µW), set with the
+    #               2 mV SINE OUT step closest to it (needs the power meter)
+    #   "frequency" outer_values = chopping frequency (Hz) = internal reference
+    #               of the lock-in whose SINE OUT drives the laser
+    outer: str = "bias"
+    outer_values: list = field(default_factory=list)
+
+    def outer_list(self):
+        """Values of the outer loop (one map or line each); [None] = just one."""
+        if getattr(self, "outer", "bias") == "bias":
+            return list(self.biases)
+        return list(self.outer_values) or [None]
 
     def axes(self):
         nx = int(round(self.x_size / self.step)) + 1
@@ -119,6 +133,28 @@ class ScanSettings:
         c, s_ = np.cos(np.radians(a)), np.sin(np.radians(a))
         dx, dy = x - self.x_center, y - self.y_center
         return self.x_center + c * dx - s_ * dy, self.y_center + s_ * dx + c * dy
+
+
+OUTER = {"bias": ("Bias", "V"), "power": ("Laser power on sample", "µW"),
+         "frequency": ("Chopping frequency", "Hz")}
+
+
+def outer_name(s):
+    """-> (label, unit) of what changes between maps/lines."""
+    return OUTER.get(getattr(s, "outer", "bias"), OUTER["bias"])
+
+
+def outer_text(s, v):
+    """'0.5 V', '20 µW', '1000 Hz', or '' for a single map."""
+    return "" if v is None else f"{v:g} {outer_name(s)[1]}"
+
+
+def outer_tag(s, v):
+    """Suffix for group / file names: '_+0.5V', '_20uW', '_1000Hz'."""
+    if v is None:
+        return ""
+    o = getattr(s, "outer", "bias")
+    return f"_{v:+g}V" if o == "bias" else f"_{v:g}" + ("uW" if o == "power" else "Hz")
 
 
 def _eng(v, unit):
@@ -228,7 +264,7 @@ class ScanData:
         self.settings = settings
         self.hw_info = hw_info
         self.xs, self.ys = settings.axes()
-        nb, ny, nx = len(settings.biases), len(self.ys), len(self.xs)
+        nb, ny, nx = len(settings.outer_list()), len(self.ys), len(self.xs)
         self.pc = np.full((nb, ny, nx, 4), np.nan)
         self.refl = np.full((nb, ny, nx, 4), np.nan)
         self.map_info = [{} for _ in range(nb)]
@@ -274,6 +310,7 @@ class ScanData:
             f.attrs["saved"] = time.strftime("%Y-%m-%dT%H:%M:%S")
             f.attrs["completed"] = self.completed
             f.attrs["notes"] = s.notes
+            f.attrs["outer_parameter"] = getattr(s, "outer", "bias")
             info = f.create_group("info")
             info.attrs["settings"] = json.dumps(asdict(s))
             info.attrs["instruments"] = json.dumps(self.hw_info)
@@ -284,9 +321,13 @@ class ScanData:
             for k, v in s.conditions.items():
                 exp.attrs[k] = str(v)
             exp.attrs["notes"] = s.notes
-            for ib, b in enumerate(s.biases):
-                g = f.create_group(f"map{ib}" + ("" if b is None else f"_{b:+g}V"))
-                g.attrs["bias_V"] = np.nan if b is None else b
+            olabel, ounit = outer_name(s)
+            for ib, b in enumerate(s.outer_list()):
+                g = f.create_group(f"map{ib}" + outer_tag(s, b))
+                is_bias = getattr(s, "outer", "bias") == "bias"
+                g.attrs["bias_V"] = np.nan if (b is None or not is_bias) else b
+                g.attrs["outer_parameter"] = f"{olabel} ({ounit})"
+                g.attrs["outer_value"] = np.nan if b is None else b
                 for k, v in (self.map_info[ib] or {}).items():
                     if v is not None and not isinstance(v, (list, dict)):
                         g.attrs[k] = v
@@ -372,8 +413,8 @@ def export_csv(d):
     ux = (-1 if getattr(st, "flip_x", False) else 1) * (np.asarray(d.xs) - ox) + 0.0
     vy = (-1 if getattr(st, "flip_y", False) else 1) * (np.asarray(d.ys) - oy) + 0.0
     ix, iy = np.argsort(ux), np.argsort(vy)
-    for ib, b in enumerate(d.settings.biases):
-        sub = os.path.join(out, f"map{ib}" + ("" if b is None else f"_{b:+g}V"))
+    for ib, b in enumerate(d.settings.outer_list()):
+        sub = os.path.join(out, f"map{ib}" + outer_tag(d.settings, b))
         os.makedirs(sub, exist_ok=True)
         for name, arr, f_, u in (("photocurrent", d.pc, fac, unit),
                                  ("reflection", d.refl, 1.0, "V")):
@@ -892,6 +933,63 @@ class ScanWorker(QtCore.QObject):
         for ix in range(nx):
             self.pixel.emit(ib, iy, ix, d.pc[ib, iy, ix], d.refl[ib, iy, ix])
 
+    # ------------------------------------------------- outer loop parameter
+    def _laser_lockin(self):
+        """The lock-in whose SINE OUT drives the laser (and sets the chopping)."""
+        return (self.hw.lockin_refl if self.lock_cfg.get("lockin") == "reflection"
+                else self.hw.lockin_pc)
+
+    def _set_outer(self, val):
+        """Set the bias / laser power / chopping frequency for the next map or
+        line. -> dict of what was really set (stored with that map)."""
+        hw, o = self.hw, getattr(self.s, "outer", "bias")
+        if val is None:
+            return {}
+        if o == "bias":
+            self.status.emit(f"Ramping bias to {val:g} V")
+            hw.bias.ramp_to(val)
+            return {}
+        li = self._laser_lockin()
+        if o == "power":
+            res = set_laser_power(self.pm, li, val * 1e-6, 0,      # closest 2 mV step
+                                  self.lock_cfg.get("max_amplitude_V", 5.0),
+                                  status=self.status.emit, stop=lambda: self._stop)
+            if not res["ok"]:
+                self.notify.emit(f"{val:g} µW: {res['message']}", "warn")
+                if res["message"].startswith("Laser power not set"):
+                    raise RuntimeError(res["message"])
+            return {"laser_power_set_uW": val, "laser_power_reached_uW": res["power_uW"],
+                    "sine_amplitude_V": res["amplitude_V"]}
+        if o == "frequency":
+            self.status.emit(f"Chopping frequency → {val:g} Hz")
+            got = li.set_frequency(val)
+            # wait until both lock-ins are locked to the new frequency again
+            lockins = (hw.lockin_pc, hw.lockin_refl)
+            t0, locked = time.time(), False
+            for x in lockins:
+                x.reference_unlocked()                  # clear the latched bit
+            time.sleep(0.2)
+            while time.time() - t0 < 15 and not self._stop:
+                if not any(x.reference_unlocked() for x in lockins):
+                    locked = True
+                    break
+                time.sleep(0.3)
+            if not locked and not self._stop:
+                self.notify.emit(f"{val:g} Hz: a lock-in did not lock to the new frequency "
+                                 "within 15 s (UNLOCK). Check its reference input.", "warn")
+            return {"chop_frequency_Hz": got, "reference_locked": locked}
+        raise ValueError(f"Unknown outer parameter '{o}'")
+
+    def _restore_outer(self):
+        """Laser power (SINE OUT) and chopping frequency back to where they were."""
+        li = self._laser_lockin()
+        if getattr(self, "_amp0", None) is not None:
+            li.set_sine_amplitude(self._amp0)
+            self.status.emit(f"SINE OUT back to {self._amp0:.3f} V")
+        if getattr(self, "_freq0", None) is not None:
+            li.set_frequency(self._freq0)
+            self.status.emit(f"Chopping frequency back to {self._freq0:g} Hz")
+
     def run(self):
         hw, s, d = self.hw, self.s, self.data
         nb, ny, nx = d.pc.shape[:3]
@@ -903,7 +1001,17 @@ class ScanWorker(QtCore.QObject):
         corners = [s.rotate_xy(x, y) for x in (d.xs[0], d.xs[-1]) for y in (d.ys[0], d.ys[-1])]
         hw.stage = SafeStage(raw_stage, [c[0] for c in corners] + [sx],
                              [c[1] for c in corners] + [sy], step)
+        outer = getattr(s, "outer", "bias")
+        uses_bias = outer == "bias" and any(b is not None for b in s.biases)
+        self._amp0 = self._freq0 = None
         try:
+            if outer == "power":
+                if self.pm is None:
+                    raise RuntimeError("Stepping the laser power needs the power meter "
+                                       "(PM100). Turn it on in Hardware → Settings.")
+                self._amp0 = self._laser_lockin().sine_amplitude()
+            elif outer == "frequency":
+                self._freq0 = self._laser_lockin().frequency()
             hw.stage.set_joystick(False)
             if s.power_lock:
                 if self.pm is None:
@@ -920,7 +1028,7 @@ class ScanWorker(QtCore.QObject):
                                 **{k: v for k, v in self.lock_cfg.items() if k != "enabled"}}
                 self.status.emit(f"Power lock on: target {target * 1e6:.2f} µW, "
                                  f"sine {amp0:.3f} V")
-            if s.target_power_uW and self.pm is not None:
+            if s.target_power_uW and self.pm is not None and outer != "power":
                 li = (hw.lockin_refl if self.lock_cfg.get("lockin") == "reflection"
                       else hw.lockin_pc)
                 hw.stage.move_to(*s.start_position())
@@ -938,12 +1046,11 @@ class ScanWorker(QtCore.QObject):
                                    "Use Step mode, or set the angle to 0.")
             if s.mode == "fly":
                 self._fly_setup()
-            for ib, bias in enumerate(s.biases):
+            for ib, val in enumerate(s.outer_list()):
                 if self._stop:
                     break
-                if bias is not None:
-                    self.status.emit(f"Ramping bias to {bias:g} V")
-                    hw.bias.ramp_to(bias)
+                extra = self._set_outer(val)
+                bias = val if outer == "bias" else None
                 # read front-panel settings for this map
                 tau_pc = hw.lockin_pc.time_constant()
                 tau_r = hw.lockin_refl.time_constant()
@@ -951,7 +1058,9 @@ class ScanWorker(QtCore.QObject):
                     "bias_V": bias, "tau_pc_s": tau_pc, "tau_refl_s": tau_r,
                     "sens_pc": hw.lockin_pc.sensitivity(),
                     "sens_refl": hw.lockin_refl.sensitivity(),
-                    "overload_lines": 0}
+                    "overload_lines": 0, **extra}
+                if outer != "bias":
+                    d.map_info[ib][outer + "_set"] = val
                 self._snapshot(ib, "start")
                 self._tau = (tau_pc, tau_r)
                 try:
@@ -959,9 +1068,13 @@ class ScanWorker(QtCore.QObject):
                 except Exception:
                     self._poles = (2, 2)
                 wait = pixel_wait(s, self._tau, self._poles)
+                if outer == "frequency" and val and min(self._tau) < 3.0 / val:
+                    self.notify.emit(f"At {val:g} Hz the lock-in time constant "
+                                     f"({min(self._tau) * 1e3:g} ms) is shorter than 3 periods: "
+                                     "the signal may be noisy. Use a longer τ.", "warn")
                 d.map_info[ib]["wait_s"] = wait
                 d.map_info[ib]["slope_poles"] = list(self._poles)
-                label = "" if bias is None else f" @ {bias:g} V"
+                label = "" if val is None else f" @ {outer_text(s, val)}"
                 rows = range(ny) if s.y_dir > 0 else range(ny - 1, -1, -1)
                 for line, iy in enumerate(rows):
                     if self._stop:
@@ -1008,18 +1121,27 @@ class ScanWorker(QtCore.QObject):
                 self._snapshot(ib, "end")
                 d.save(self.path)  # autosave after each map
             d.completed = not self._stop
-            if any(b is not None for b in s.biases):
+            if uses_bias:
                 hw.bias.ramp_to(0.0)
+            self._restore_outer()
             hw.stage.move_to(*s.start_position())   # back to where you started
             d.save(self.path)
             self.finished.emit(self.path)
         except InterruptedError:
+            try:
+                self._restore_outer()
+            except Exception:
+                pass
             self.finished.emit(self.path)
             return
         except Exception:
             try:
-                if any(b is not None for b in s.biases):
+                if uses_bias:
                     hw.bias.ramp_to(0.0)
+            except Exception:
+                pass
+            try:
+                self._restore_outer()
             except Exception:
                 pass
             try:
