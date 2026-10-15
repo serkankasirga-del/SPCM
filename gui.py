@@ -1760,6 +1760,15 @@ class MainWindow(QtWidgets.QMainWindow):
         if self._busy():
             return
         try:
+            px, py = self.hw.stage.position()
+            dist = float(np.hypot(x - px, y - py))
+            if dist > 500 and QtWidgets.QMessageBox.question(
+                    self, "SPCM",
+                    f"This moves the stage {dist / 1000:.2f} mm.\n\n"
+                    f"Stage now: x = {px:.1f}, y = {py:.1f} µm\n"
+                    f"Target: x = {x:.1f}, y = {y:.1f} µm\n\nMove there?") != \
+                    QtWidgets.QMessageBox.StandardButton.Yes:
+                return
             self.hw.stage.move_to(x, y)
             if mark is not None:
                 for p in (self.pc_panel, self.r_panel):
