@@ -98,13 +98,13 @@ class MapPanel(QtWidgets.QWidget):
         row.setContentsMargins(6, 0, 6, 4)
         self.min_e, self.max_e = QtWidgets.QLineEdit(), QtWidgets.QLineEdit()
         for lab, e in (("Min", self.min_e), ("Max", self.max_e)):
-            e.setFixedWidth(95)
+            e.setFixedWidth(80)
             e.setToolTip("Click, type a value (e.g. -2e-9, -2n, 0.5µ) and press Enter")
             e.editingFinished.connect(self._typed)
             row.addWidget(QtWidgets.QLabel(lab))
             row.addWidget(e)
-        row.addSpacing(10)
-        self.follow = QtWidgets.QCheckBox("Cut follows scan")
+        row.addSpacing(6)
+        self.follow = QtWidgets.QCheckBox("Cut follows")
         self.follow.setChecked(True)
         self.follow.setToolTip("During a scan the line cut shows the line being scanned. "
                                "Drag the dashed line to look at another line "
@@ -409,7 +409,7 @@ class MainWindow(QtWidgets.QMainWindow):
             sa = QtWidgets.QScrollArea()
             sa.setWidgetResizable(True)
             sa.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-            sa.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            sa.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             sa.setWidget(inner)
             self.side_tabs.addTab(sa, title)
             return lay
@@ -599,6 +599,8 @@ class MainWindow(QtWidgets.QMainWindow):
         f = QtWidgets.QFormLayout(g)
         self.li_pc = QtWidgets.QLabel("-")
         self.li_r = QtWidgets.QLabel("-")
+        for lab in (self.li_pc, self.li_r):
+            lab.setWordWrap(True)
         f.addRow("Photocurrent", self.li_pc)
         f.addRow("Reflection", self.li_r)
         rd = QtWidgets.QPushButton("Refresh")
@@ -692,6 +694,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         inst_lay.addStretch(1)
         self.build_sweep_tab(sweep_lay)
+        for cb in side.findChildren(QtWidgets.QComboBox):
+            cb.setSizeAdjustPolicy(
+                QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            cb.setMinimumContentsLength(10)
         left = scan_lay
         g = QtWidgets.QGroupBox("Save")
         f = QtWidgets.QFormLayout(g)
@@ -743,7 +749,9 @@ class MainWindow(QtWidgets.QMainWindow):
         auto = QtWidgets.QPushButton("Auto colour")
         auto.clicked.connect(self.reset_levels)
         bar.addWidget(auto)
-        bar.addSpacing(20)
+        bar.addStretch(1)
+        right.addLayout(bar)
+        bar = QtWidgets.QHBoxLayout()           # second row: frame and line tools
         self.rois, self._roi_sync = [], False
         self.frame_btn = QtWidgets.QPushButton("Draw scan frame")
         self.frame_btn.setCheckable(True)
@@ -1253,8 +1261,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.cal_lab.setWordWrap(True)
         self.cal_lab.setMinimumWidth(120)
         self.cal_lab.setStyleSheet("color:gray")
-        bar2.addWidget(self.cal_lab)
-        bar2.addSpacing(15)
+        bar2.addWidget(self.cal_lab, 1)
+        lay.addLayout(bar2)
+        bar2 = QtWidgets.QHBoxLayout()          # third row: frame and line on the image
         self.cam_rois, self.cam_line = [], []
         self.cam_frame_btn = QtWidgets.QPushButton("Draw scan frame")
         self.cam_frame_btn.setCheckable(True)
@@ -1563,7 +1572,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 except Exception:
                     poles = 4
                 self._poles_now.append(poles)
-                lab.setText(f"τ = {si(tau, 's')}, {6 * poles} dB/oct,  "
+                lab.setText(f"τ = {si(tau, 's')}, {6 * poles} dB/oct\n"
                             f"sens = {si(li.sensitivity(), 'V/A')}")
         except Exception as e:
             self.statusBar().showMessage(f"Lock-in read failed: {e}")
@@ -2013,7 +2022,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                 "The mean is saved, and the spread (standard deviation) "
                                 "as the error bar.")
         f.addRow("Readings per point", self.sw_navg)
-        self.sw_restore = QtWidgets.QCheckBox("Put the SINE OUT (laser power) back afterwards")
+        self.sw_restore = QtWidgets.QCheckBox("Put the SINE OUT back afterwards")
         self.sw_restore.setChecked(bool(sw.get("restore_power", True)))
         f.addRow(self.sw_restore)
         self.sw_note = QtWidgets.QLabel()

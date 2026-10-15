@@ -122,7 +122,7 @@ The **Point sweep** tab on the right shows the result live:
 - for power sweeps, a **log-log plot** with a fitted power law |S| = A·P^α and the value of α (one per bias);
 - for bias × power, one curve per bias (with a legend) and a **bias–power map** coloured by the photocurrent or photovoltage.
 
-Afterwards the SINE OUT goes back to where it was (untick *Put the laser power back afterwards* if you don't want that) and the bias ramps back to 0 V. You get `…_power_sweep.h5` (or `_bias_sweep`, `_bias_power_sweep`), a PNG with the same plots, and a `_csv` folder with `sweep.csv` (one row per point, every channel with its spread) and, for bias × power, `photocurrent_X_matrix.csv`.
+Afterwards the SINE OUT goes back to where it was (untick *Put the SINE OUT back afterwards* if you don't want that) and the bias ramps back to 0 V. You get `…_power_sweep.h5` (or `_bias_sweep`, `_bias_power_sweep`), a PNG with the same plots, and a `_csv` folder with `sweep.csv` (one row per point, every channel with its spread) and, for bias × power, `photocurrent_X_matrix.csv`.
 
 ## Line scans
 
