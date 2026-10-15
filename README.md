@@ -2,12 +2,12 @@
 
 Hardware: Märzhäuser Tango Desktop stage · SR830 #1 (photocurrent, GPIB) · SR830 #2 (reflection, GPIB) · optional bias from the SR570 preamp (RS-232), an SR830 AUX OUT or a Keithley 24xx.
 
-Only a few things are under software control. **Sensitivity, time constant, phase, reference, filters and reserve stay on the SR830 front panels.** The program only reads them, and it stores τ and sensitivity with every map. The Tango joystick works between scans and is switched off only while a scan runs.
+Only a few things are under software control. **Sensitivity, time constant, phase, reference, filters and reserve stay on the SR830 front panels.** The program only reads them, and it stores τ and sensitivity with every map. The two exceptions are the SINE OUT amplitude (the laser power) and, only during a line scan that steps it, the chopping frequency; both are put back afterwards. The Tango joystick works between scans and is switched off only while a scan runs.
 
-## Getting SPCM and updates (from github.com/DP7T/SPCM)
+## Getting SPCM and updates (from github.com/serkankasirga-del/SPCM)
 
 **Option A: unzip and double-click (recommended)**
-1. On github.com/DP7T/SPCM press the green **Code** button → **Download ZIP**.
+1. On github.com/serkankasirga-del/SPCM press the green **Code** button → **Download ZIP**.
 2. Unzip it, for example into `Documents`. You get a folder `SPCM-main`.
 3. In that folder, double-click **Install SPCM.bat**. The first time it installs Python and the libraries (a few minutes); it creates the **SPCM** icons on the Desktop.
 4. To update: download the ZIP again, unzip it to the **same place** (say *Replace* when Windows asks) and double-click **Install SPCM.bat** again. Your settings (`config.yaml`) and your `data` folder are kept.
@@ -124,13 +124,29 @@ The **Point sweep** tab on the right shows the result live:
 
 Afterwards the SINE OUT goes back to where it was (untick *Put the SINE OUT back afterwards* if you don't want that) and the bias ramps back to 0 V. You get `…_power_sweep.h5` (or `_bias_sweep`, `_bias_power_sweep`), a PNG with the same plots, and a `_csv` folder with `sweep.csv` (one row per point, every channel with its spread) and, for bias × power, `photocurrent_X_matrix.csv`.
 
-## Line scans
+## Line scans (also: line × bias, line × laser power, line × chopping frequency)
 
-1. Press **Draw line** above the maps. A yellow line appears on both maps; drag its ends (or the whole line) where you want it. The status bar shows its length and the number of points.
-2. Press **Scan this line**. The laser steps along the line at any angle, using the **Step**, **Timing**, **Bias** list and laser-power setting from the Scan and Instruments tabs.
-3. The **Line scan** tab on the right shows the signal and the reflection vs the distance along the line, one curve per bias. With a bias list you also get the **distance × bias image**.
+1. Draw the line: on the **Camera** tab (after *Calibrate camera*) press **Draw line** and drag its ends over the sample; or press **Draw line** above the maps to draw it on a map. The status bar shows its length and the number of points.
+2. Choose what changes from one line to the next in the Scan tab, box **Line scan: change between lines**:
+   - *Nothing (one line)*: a single line.
+   - *Bias (V)*: e.g. `-1:1:0.25`. Needs the SR570 (as for bias maps). The bias ramps back to 0 V at the end.
+   - *Laser power on sample (µW)*: e.g. `1:100:*2` or `5, 10, 20`. Each line is measured at the 2 mV SINE OUT step closest to that power, like the point sweeps, so the power meter is needed. The power really reached is saved for every line.
+   - *Chopping frequency (Hz)*: e.g. `100:10k:*2`. The program changes the **internal reference frequency** of the lock-in whose SINE OUT drives the laser (*Hardware → Settings → Laser driven by SINE OUT of*). That lock-in must be on **INTERNAL** reference; the other lock-in should follow it through its external reference input. After each change the program waits until both lock-ins report that they are locked again. Use a time constant of at least a few periods of the lowest frequency (the program warns if not).
 
-You can draw the line on the camera image too, once the camera is calibrated. Line scans are saved as `…_line.h5` (the same layout as maps, with 1-row images plus `distance_um` and the x, y of every point), a PNG, and `_csv/line.csv`.
+   The SINE OUT and the frequency are put back to their starting values at the end, also when you press Stop.
+3. Press **Scan this line** (on the Camera tab or above the maps). The laser steps along the line at any angle, with the **Step** and **Timing** from the Scan tab.
+4. The **Line scan** tab on the right shows the signal and the reflection vs the distance along the line, one curve per value, and with several values the **distance × parameter image** (bias, power or frequency on the vertical axis).
+
+Line scans are saved as `…_line.h5` (the same layout as maps, one group per value, with 1-row images plus `distance_um` and the x, y of every point), a PNG (log scale for power and frequency when they span more than a factor 10), and `_csv/line.csv` plus `photocurrent_X_matrix.csv` (rows: the parameter, columns: distance).
+
+## Resolution of a map (from a sharp edge)
+
+1. During or after a map scan press **Measure resolution** above the maps. A green line appears on the **reflection** map and a small *Resolution* window opens.
+2. Drag the green line **across one sharp edge** (for example the edge of a gold electrode), at right angles to the edge, with flat parts on both sides.
+3. The window shows the reflection along the line, its first derivative, and a Gaussian fitted to the derivative. The derivative of an edge blurred by the laser spot is the spot profile, so the **FWHM of the Gaussian is the resolution** of the image. It updates while you drag and while the scan runs. It uses the reflection channel shown (X, Y or R).
+4. **Save PNG + CSV** writes `<scan>_resolution_1.png` and `.csv` (profile, derivative, fit) next to the scan file.
+
+Notes: if the FWHM is less than about 2.5 pixels, the step size limits it (the window says so); scan a small area across the edge with a fine step for the true resolution. A line that crosses the edge at an angle makes it look wider by 1/cos(angle). With no clear edge on the line the program says so instead of giving a number.
 
 ## Camera calibration
 
@@ -200,9 +216,13 @@ Every image in the file is a plain 2-D array (rows = y, columns = x), in the sam
 ```
 /info                       settings, instruments, conversion formula (attributes)
   /experiment               your experiment notes (attributes)
-/map0            (or /map0_-0.5V, /map1_+0V … for a bias sweep, one group per bias)
+/map0            (or /map0_-0.5V, /map1_+0V … one group per bias; line scans that step
+                  the laser power or chopping frequency: /map0_20uW, /map0_1000Hz …)
   attributes:               bias, τ and sensitivity of both lock-ins, wait time,
-                            laser power at start/end (µW, meter and on sample) …
+                            laser power at start/end (µW, meter and on sample),
+                            outer_parameter / outer_value (what changed between maps),
+                            laser_power_set_uW / _reached_uW, sine_amplitude_V,
+                            chop_frequency_Hz …
   x_um, y_um                axes from the origin (0, 0)
   x_stage_um, y_stage_um    the same positions in stage coordinates
   photocurrent_X / _Y / _R  converted signal (A or V; the 'unit' attribute says which)
@@ -226,6 +246,7 @@ SPCM still opens files saved by earlier versions. Point sweeps have their own si
 
 - **Tango commands** (`instruments.py`, `TangoStage`): the program uses `!moa`, `?pos`, `?statusaxis`, `!dim 1 1` (µm), `!joy`, `!a` and `!autostatus 0`, at 57600 baud. Compare these with the instruction set for your firmware. If your controller runs in LEP/ASI compatibility mode, switch it back to the native Tango command set.
 - **Scan direction:** if the image comes out mirrored relative to the camera, swap the x and y signs in `TangoStage.move_to`/`position`.
+- **Chopping frequency** (line scans that step it): the program uses the SR830 commands `FMOD?` (must be internal), `FREQ` / `FREQ?` and bit 3 of `LIAS?` (reference unlock) on the lock-in that drives the laser. Check that the other lock-in follows the new frequency.
 - **Speed:** a pixel takes about the wait plus ~20–40 ms for the move and reads. If the stage rings after small steps, raise **Extra wait**.
 
 ## Disclaimer

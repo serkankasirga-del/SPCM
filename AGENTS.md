@@ -28,7 +28,8 @@ the real hardware and report back with screenshots. Write in plain language for 
 | `gui.py` | `MainWindow`, `MapPanel`, toasts and notifications, power poller, camera view, frame and line drawing (maps and camera), calibration button, point-sweep tab |
 | `sweeps.py` | single-point sweeps: `SweepSettings`, `SweepData` (save/load/CSV/figure, power-law fit), `SweepWorker` |
 | `linescan.py` | line scans: `line_settings()` builds a 1-row rotated `ScanSettings` (`scan_type="line"`) run by the normal `ScanWorker`; CSV and figure |
-| `sweep_view.py` | live plots: `SweepView` (point sweeps), `LineView` (line scans) |
+| `sweep_view.py` | live plots: `SweepView` (point sweeps), `LineView` (line scans), `ResolutionView` (resolution window) |
+| `resolution.py` | resolution from an edge: profile along a line, derivative, Gaussian fit (FWHM), export |
 | `calibration.py` | camera ↔ stage calibration (`Calibration`, `calibrate()`, phase-correlation `image_shift()`) |
 | `tools/selftest.py` | tests everything in simulation (also the window, off-screen, with screenshots) |
 | `settings_dialog.py` | hardware settings window; writes `config.yaml` |
@@ -43,7 +44,7 @@ the real hardware and report back with screenshots. Write in plain language for 
 ## Decisions already made (keep them)
 
 **Lock-ins and signal**
-- **Analog control:** the lock-ins are only **read** (τ, sensitivity, slope, input). Never add controls that change them. The only exception is the SINE OUT amplitude for setting the laser power.
+- **Analog control:** the lock-ins are only **read** (τ, sensitivity, slope, input). Never add controls that change them. Exceptions: the SINE OUT amplitude for setting the laser power, and (since 0.11, asked for by the user) the internal reference frequency of the laser lock-in, only during a line scan that steps the chopping frequency. Both are put back afterwards.
 - **Signal conversion** gives peak amplitude:
   - SR570: × √2 × sensitivity (A/V) → photocurrent.
   - SR560: × √2 ÷ gain → photovoltage.
@@ -72,6 +73,8 @@ the real hardware and report back with screenshots. Write in plain language for 
 - N readings per point (default 10), about one τ apart; mean and standard deviation (error bars). Power plots: linear and log-log with a fitted |S| = A·P^α.
 - After a sweep the SINE OUT is restored (optional) and the bias ramped to 0.
 - Line scans reuse `ScanWorker` (step mode, rotated, 1 row) so all safety checks apply.
+- **Outer loop** (`ScanSettings.outer`): what changes from one map/line to the next: `bias` (the `biases` list), `power` (µW on the sample, closest 2 mV SINE OUT step, power meter needed, reached power stored) or `frequency` (Hz, internal reference of the laser lock-in; waits for both lock-ins to re-lock). The GUI offers power and frequency for line scans only ("Line scan: change between lines" box). Use `outer_list()`, never `biases`, for the number of maps.
+- **Resolution:** derivative of the reflection along a line across an edge, Gaussian fit, FWHM = resolution. Derivative taken across ~1 map pixel; no number when the edge is unclear.
 - Camera calibration matrix A (µm per pixel) is in `config.yaml` → `camera.calibration`. The laser is at the cyan cross. Pixel p ↔ stage `S_now + A·(p − cross)`.
 
 **Data**
@@ -115,10 +118,11 @@ It needs the libraries from `requirements.txt`; without PyQt5 it skips the windo
 
 - 0.9.0: first release (pre-release, being tested in the lab).
 - 0.10.0: pre-release with point sweeps, line scans, camera calibration. Tested in simulation; being tested on the microscope.
+- 0.11.0: resolution from an edge, line × bias/power/frequency scans, fixes from a code review. Tested in simulation.
 
 ## Working with the user
 
 - Keep changes small and testable, and say exactly what to check on the real setup.
 - Ask before changing the conventions above.
 - Explain errors and setup steps in plain words. The user sends screenshots.
-- Commit as `DP7T <342493853+DP7T@users.noreply.github.com>`.
+- Commit as the repository owner, `serkankasirga-del` (github.com/serkankasirga-del/SPCM).
