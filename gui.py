@@ -777,6 +777,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.use_line_btn.clicked.connect(self.scan_line)
         bar.addWidget(self.line_btn)
         bar.addWidget(self.use_line_btn)
+        bar.addSpacing(12)
+        self.res_roi = self.res_view = None
+        self.res_btn = QtWidgets.QPushButton("Measure resolution")
+        self.res_btn.setCheckable(True)
+        self.res_btn.setToolTip("Shows a green line on the reflection map. Drag it across "
+                                "a sharp edge: the derivative of the reflection along it is "
+                                "fitted with a Gaussian, whose FWHM is the resolution. "
+                                "Works during and after a scan.")
+        self.res_btn.toggled.connect(self.toggle_resolution)
+        bar.addWidget(self.res_btn)
         bar.addStretch(1)
         right.addLayout(bar)
 
@@ -2405,6 +2415,81 @@ class MainWindow(QtWidgets.QMainWindow):
         rch = self.ch_r.currentIndex()
         self.r_panel.set_unit("V" if rch < 3 else "°", CHANNELS[rch])
         self.r_panel.show_map(d.refl[ib, :, :, self.ch_r.currentIndex()][view], pos)
+        if self.res_roi is not None and self.res_btn.isChecked():
+            self._resolution_changed()
+
+    # ---------------------------------------------------------------- resolution
+    def toggle_resolution(self, on):
+        if on and self.data is None:
+            self.res_btn.setChecked(False)
+            self.error("Open or measure a map first, then measure the resolution on its "
+                       "reflection map.")
+            return
+        if on and self.res_roi is None:
+            u, v, _, _ = self._view_axes(self.data)
+            a = (u[0] + (u[-1] - u[0]) * 0.35, v[0] + (v[-1] - v[0]) * 0.5)
+            b = (u[0] + (u[-1] - u[0]) * 0.65, v[0] + (v[-1] - v[0]) * 0.5)
+            self.res_roi = pg.LineSegmentROI([a, b], pen=pg.mkPen("#76ff03", width=2),
+                                             hoverPen=pg.mkPen("#ffeb3b", width=2))
+            self.r_panel.plot.addItem(self.res_roi)
+            self.res_roi.sigRegionChanged.connect(self._resolution_changed)
+        if on and self.res_view is None:
+            from sweep_view import ResolutionView
+            self.res_view = ResolutionView(self)
+            self.res_view.save_btn.clicked.connect(self.save_resolution)
+            self.res_view.closed.connect(lambda: self.res_btn.setChecked(False))
+        if self.res_roi is not None:
+            self.res_roi.setVisible(on)
+        if self.res_view is not None:
+            self.res_view.setVisible(on)
+        if on:
+            self.update_resolution()
+
+    def _resolution_changed(self, *_):
+        """Recompute at most ~15 times per second (while dragging, during a scan)."""
+        if not getattr(self, "_res_queued", False):
+            self._res_queued = True
+            QtCore.QTimer.singleShot(60, self.update_resolution)
+
+    def update_resolution(self):
+        self._res_queued = False
+        if self.res_roi is None or not self.res_btn.isChecked() or self.data is None:
+            return
+        import resolution
+        d = self.data
+        ib = max(self.map_sel.currentIndex(), 0)
+        rch = min(self.ch_r.currentIndex(), 2)       # X, Y or R (not the phase)
+        u, v, oix, oiy = self._view_axes(d)
+        img = d.refl[ib, :, :, rch][np.ix_(oiy, oix)]
+        p0, p1 = [(p.x(), p.y()) for p in (self.res_roi.mapToParent(h.pos())
+                                           for h in self.res_roi.getHandles())]
+        step = abs(u[1] - u[0]) if len(u) > 1 else (abs(v[1] - v[0]) if len(v) > 1 else None)
+        try:
+            res = resolution.analyse(img, u, v, p0, p1, step)
+        except Exception as e:
+            self.statusBar().showMessage(f"Resolution: {e}")
+            return
+        res["channel"], res["map"] = CHANNELS[rch], ib
+        self.res_view.set_result(res)
+
+    def save_resolution(self):
+        res = self.res_view.res if self.res_view is not None else None
+        if not res or not res["fit"]:
+            return
+        import resolution
+        path = getattr(self.data, "path", None) or getattr(self.worker, "path", None) \
+            or os.path.join(self.folder.text() or "data", "scan.h5")
+        base = os.path.splitext(path)[0]
+        k = 1
+        while os.path.exists(f"{base}_resolution_{k}.png"):
+            k += 1
+        title = (f"{os.path.basename(base)}: reflection {res['channel']}"
+                 + (f", map {res['map']}" if len(self.data.settings.biases) > 1 else ""))
+        try:
+            csv, png = resolution.export(res, f"{base}_resolution_{k}", title)
+            self.statusBar().showMessage(f"Resolution saved: {png} and .csv")
+        except Exception as e:
+            self.error(f"Could not save:\n{e}")
 
     def reset_levels(self):
         for p in (self.pc_panel, self.r_panel):

@@ -263,3 +263,71 @@ class LineView(QtWidgets.QWidget):
         n = int(np.isfinite(sig).sum())
         self.info.setText(f"{n} of {sig.size} points  ·  {dist[-1]:.2f} µm, "
                           f"{len(dist)} points per line, step {s.step * 1000:.0f} nm")
+
+
+class ResolutionView(QtWidgets.QWidget):
+    """Small window next to the maps: reflection profile along the green line,
+    its derivative and the Gaussian fit -> FWHM = resolution."""
+    closed = pg.QtCore.Signal()
+
+    def closeEvent(self, ev):
+        self.closed.emit()
+        super().closeEvent(ev)
+
+    def __init__(self, parent=None):
+        super().__init__(parent, pg.QtCore.Qt.WindowType.Tool)
+        self.setWindowTitle("SPCM – resolution from an edge")
+        self.resize(520, 560)
+        lay = QtWidgets.QVBoxLayout(self)
+        self.result = QtWidgets.QLabel("Drag the green line on the reflection map "
+                                       "across one sharp edge.")
+        self.result.setWordWrap(True)
+        self.result.setStyleSheet("font-size:12pt; font-weight:bold")
+        lay.addWidget(self.result)
+        hint = QtWidgets.QLabel("Draw the line at right angles to the edge (a slanted line "
+                                "makes the edge look wider), with flat parts on both sides.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:gray")
+        lay.addWidget(hint)
+        self.glw = pg.GraphicsLayoutWidget()
+        lay.addWidget(self.glw, 1)
+        self.prof = self.glw.addPlot(row=0, col=0)
+        self.der = self.glw.addPlot(row=1, col=0)
+        self.der.setXLink(self.prof)
+        for p in (self.prof, self.der):
+            p.showGrid(x=True, y=True, alpha=0.25)
+            p.getAxis("bottom").enableAutoSIPrefix(False)
+        self.der.setLabel("bottom", "Distance along the line (µm)")
+        self.prof.setLabel("left", "Reflection", units="V")
+        self.der.setLabel("left", "dI/dd", units="V/µm")
+        self.prof_curve = self.prof.plot(pen=pg.mkPen("#9e9e9e", width=1.2), symbol="o",
+                                         symbolSize=3, symbolPen=None, symbolBrush="#9e9e9e",
+                                         connect="finite")
+        self.der_pts = self.der.plot(pen=None, symbol="o", symbolSize=4, symbolPen=None,
+                                     symbolBrush="#4fc3f7")
+        self.fit_curve = self.der.plot(pen=pg.mkPen("#e53935", width=2))
+        row = QtWidgets.QHBoxLayout()
+        self.save_btn = QtWidgets.QPushButton("Save PNG + CSV")
+        self.save_btn.setToolTip("Saves the profile, derivative and fit next to the scan "
+                                 "file (…_resolution_1.png / .csv)")
+        row.addWidget(self.save_btn)
+        row.addStretch(1)
+        lay.addLayout(row)
+        self.res = None
+
+    def set_result(self, res):
+        from resolution import _gauss
+        self.res = res
+        d, inten, der = res["dist"], res["intensity"], res["deriv"]
+        self.prof_curve.setData(d, inten)
+        ok = np.isfinite(der)
+        self.der_pts.setData(d[ok], der[ok])
+        fit = res["fit"]
+        if fit:
+            xx = np.linspace(d[0], d[-1], 400)
+            self.fit_curve.setData(xx, _gauss(xx, [fit["a"], fit["x0"], fit["sigma"],
+                                                   fit["c"]]))
+        else:
+            self.fit_curve.setData([], [])
+        self.result.setText(res["message"])
+        self.save_btn.setEnabled(fit is not None)
