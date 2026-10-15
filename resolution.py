@@ -147,8 +147,8 @@ def analyse(img, xs, ys, p0, p1, pixel_um=None):
     fit = fit_gaussian(d, der[ok])
     clear = (fit is not None and d[0] <= fit["x0"] <= d[-1]
              and fit["sigma"] < 0.25 * (d[-1] - d[0])          # a peak, not a slope
-             and abs(fit["a"]) > 5 * fit["a_err"]               # well determined
-             and abs(fit["a"]) > 4 * fit["rms"])                # above the noise
+             and abs(fit["a"]) > 8 * fit["a_err"]               # well determined
+             and abs(fit["a"]) > 3 * fit["rms"])                # above the noise
     if not clear:
         res["message"] = ("No clear edge along the line: draw it across one sharp edge "
                           "(e.g. an electrode edge), with flat parts on both sides.")
