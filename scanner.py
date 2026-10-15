@@ -1068,7 +1068,9 @@ class ScanWorker(QtCore.QObject):
                 except Exception:
                     self._poles = (2, 2)
                 wait = pixel_wait(s, self._tau, self._poles)
-                if outer == "frequency" and val and min(self._tau) < 3.0 / val:
+                if outer == "frequency" and val and min(self._tau) < 3.0 / val \
+                        and not getattr(self, "_tau_warned", False):
+                    self._tau_warned = True
                     self.notify.emit(f"At {val:g} Hz the lock-in time constant "
                                      f"({min(self._tau) * 1e3:g} ms) is shorter than 3 periods: "
                                      "the signal may be noisy. Use a longer τ.", "warn")

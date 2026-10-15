@@ -594,6 +594,31 @@ class MainWindow(QtWidgets.QMainWindow):
         f.addRow("Source", QtWidgets.QLabel(hw.bias.idn))
         left.addWidget(g)
 
+        # line scans: one line per value of a parameter -> distance × parameter
+        ls = config.get("line_scan", {}) or {}
+        g = QtWidgets.QGroupBox("Line scan: change between lines")
+        f = QtWidgets.QFormLayout(g)
+        self.ln_param = QtWidgets.QComboBox()
+        for label, key in (("Nothing (one line)", "none"), ("Bias (V)", "bias"),
+                           ("Laser power on sample (µW)", "power"),
+                           ("Chopping frequency (Hz)", "frequency")):
+            self.ln_param.addItem(label, key)
+        self.ln_param.setCurrentIndex(max(self.ln_param.findData(ls.get("param", "none")), 0))
+        self.ln_values = QtWidgets.QLineEdit()
+        self._ln_texts = {"bias": ls.get("bias", "-1:1:0.25"),
+                          "power": ls.get("power", "1:100:*2"),
+                          "frequency": ls.get("frequency", "100:10k:*2")}
+        self._ln_shown = None
+        f.addRow("Change", self.ln_param)
+        f.addRow("Values", self.ln_values)
+        self.ln_note = QtWidgets.QLabel()
+        self.ln_note.setWordWrap(True)
+        self.ln_note.setStyleSheet("color:gray")
+        f.addRow(self.ln_note)
+        left.addWidget(g)
+        self.ln_param.currentIndexChanged.connect(self._ln_param_changed)
+        self.ln_values.editingFinished.connect(self._remember_line_scan)
+
         left = inst_lay
         g = QtWidgets.QGroupBox("Lock-ins (front panel, read only)")
         f = QtWidgets.QFormLayout(g)
@@ -768,9 +793,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.line_btn = QtWidgets.QPushButton("Draw line")
         self.line_btn.setCheckable(True)
         self.line_btn.setToolTip("Show a line on the maps. Drag its two ends where you "
-                                 "want, then press 'Scan this line'. Step, timing, bias "
-                                 "list and laser power come from the Scan and "
-                                 "Instruments tabs.")
+                                 "want, then press 'Scan this line'. Step and timing come "
+                                 "from the Scan tab; what changes from line to line (bias, "
+                                 "laser power, chopping frequency) from 'Line scan' there.")
         self.line_btn.toggled.connect(self.toggle_line)
         self.use_line_btn = QtWidgets.QPushButton("Scan this line")
         self.use_line_btn.setEnabled(False)
@@ -844,6 +869,7 @@ class MainWindow(QtWidgets.QMainWindow):
             w.currentIndexChanged.connect(self._amp_changed)
         self.amp_gain.currentIndexChanged.connect(self._amp_changed)
         self._amp_changed()
+        self._ln_param_changed()
         QtCore.QTimer.singleShot(300, self._start_here_on_launch)
         dark = bool((self.config.get("ui", {}) or {}).get("dark", False))
         for w in self.findChildren(pg.GraphicsLayoutWidget):
@@ -1815,6 +1841,71 @@ class MainWindow(QtWidgets.QMainWindow):
         return u[ix], v[iy], ix, iy
 
     # ---------------------------------------------------------------- line scans
+    LN_NOTES = {
+        "none": "Draw a line on the Camera image (after calibrating) or on a map, then "
+                "press 'Scan this line'.",
+        "bias": "One line per bias: a distance × bias image. Needs the SR570 (Instruments "
+                "tab and Hardware → Settings). Ramped back to 0 V at the end.",
+        "power": "One line per laser power on the sample, each set with the 2 mV SINE OUT "
+                 "step closest to it (needs the power meter); the power reached is saved. "
+                 "The SINE OUT is put back at the end. e.g. 1:100:*2 or 5, 10, 20",
+        "frequency": "One line per chopping frequency: the internal reference of the lock-in "
+                     "whose SINE OUT drives the laser (it must be on INTERNAL reference). The "
+                     "program waits until both lock-ins lock again; the frequency is put back "
+                     "at the end. Use a time constant of several periods. e.g. 100:10k:*2",
+    }
+
+    def _ln_param_changed(self, *_):
+        k = self.ln_param.currentData()
+        if self._ln_shown in self._ln_texts:            # keep what was typed for each
+            self._ln_texts[self._ln_shown] = self.ln_values.text()
+        self._ln_shown = k
+        self.ln_values.setEnabled(k != "none")
+        self.ln_values.setText(self._ln_texts.get(k, ""))
+        self.ln_note.setText(self.LN_NOTES[k])
+        self._remember_line_scan()
+
+    def _remember_line_scan(self):
+        k = self.ln_param.currentData()
+        if k in self._ln_texts:
+            self._ln_texts[k] = self.ln_values.text()
+        vals = {"param": k, **self._ln_texts}
+        self.config["line_scan"] = vals
+        for key, v in vals.items():
+            self._save_setting("line_scan", key, v)
+
+    def _line_param(self):
+        """-> (outer, values) for the next line scan, checked."""
+        from scanner import parse_list
+        k = self.ln_param.currentData()
+        if k == "none":
+            return "bias", None
+        text = self.ln_values.text()
+        if k == "bias":
+            if not (self.has_bias and self.amp_mode.currentData() == "sr570"):
+                raise ValueError("Bias needs the SR570 current preamp (Instruments tab) and "
+                                 "the SR570 as bias source (Hardware → Settings).")
+            vals = parse_bias_list(text)
+            lim = self.hw.bias.max_abs_V
+            bad = [b for b in vals if abs(b) > lim]
+            if bad:
+                raise ValueError(f"Bias {bad[0]} V exceeds the limit of {lim} V.")
+        elif k == "power":
+            if self.pm is None:
+                raise ValueError("Stepping the laser power needs the power meter. Turn it "
+                                 "on in Hardware → Settings.")
+            vals = parse_list(text, 1e-6)
+            if vals and min(vals) <= 0:
+                raise ValueError("Powers must be above 0.")
+        else:
+            vals = parse_list(text, 1.0)
+            if vals and not all(0.001 <= v <= 102000 for v in vals):
+                raise ValueError("Chopping frequencies must be between 1 mHz and 102 kHz "
+                                 "(the SR830 range).")
+        if not vals:
+            raise ValueError("The list of values for the line scan is empty.")
+        return k, vals
+
     def toggle_line(self, on):
         if on and self.data is None:
             self.line_btn.setChecked(False)
@@ -1875,9 +1966,11 @@ class MainWindow(QtWidgets.QMainWindow):
         import linescan
         try:
             base = self.settings()
+            outer, vals = self._line_param()
             s = linescan.line_settings(
                 start_stage, end_stage, base.step,
-                biases=None if base.biases == [None] else base.biases,
+                biases=vals if outer == "bias" else None,
+                outer=outer, values=vals if outer != "bias" else None,
                 origin=self.origin_xy, flips=(self.sx < 0, self.sy < 0),
                 settle_tc=base.settle_tc, settle_auto=base.settle_auto,
                 backlash_um=base.backlash_um, extra_settle_ms=base.extra_settle_ms,
