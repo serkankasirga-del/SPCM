@@ -1030,7 +1030,7 @@ class MainWindow(QtWidgets.QMainWindow):
         li = self._laser_lockin()
         self.ps_worker = PowerSetter(self.pm, li, self.pm_target.value() * 1e-6,
                                      self.pm_tol.value(),
-                                     (self.config.get("power_set", {}) or {}).get(
+                                     (self.config.get("power_lock", {}) or {}).get(
                                          "max_amplitude_V", 5.0))
         self.ps_thread = QtCore.QThread()
         self.ps_worker.moveToThread(self.ps_thread)
