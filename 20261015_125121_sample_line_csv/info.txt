@@ -1,0 +1,60 @@
+Line scan
+Sample: sample
+Started: 2026-10-15T12:51:21
+Completed: True
+From (22.271, -0.001) to (3.000, 0.000) µm (from the origin), 19.271 µm long, 20 points, step 1014.2 nm
+Photocurrent conversion: raw × √2 × 1 µA/V (SR570) = peak (amplitude) [A]
+
+Experiment:
+  Polarization: 
+  Temperature: 
+  Pressure: 
+  Laser wavelength: 
+  Objective: 
+  Modulation frequency: 
+  Gate voltage: 
+
+Notes:
+
+
+Settings:
+  x_center: -22.27060972673115
+  y_center: 0.0012696155311602724
+  origin: corner
+  origin_x: 0.0
+  origin_y: 0.0
+  flip_x: True
+  flip_y: True
+  angle_deg: -0.0037748474213371297
+  x_dir: 1
+  y_dir: 1
+  x_size: 19.270609768554515
+  y_size: 0.0
+  step: 1.014242619397606
+  serpentine: False
+  settle_tc: 3.0
+  settle_auto: True
+  backlash_um: 1.0
+  extra_settle_ms: 0.0
+  biases: [None]
+  sample: sample
+  power_lock: False
+  target_power_uW: None
+  power_tol_pct: 1.0
+  mode: step
+  amp_mode: sr570
+  amp_value: 1e-06
+  signal_as: peak
+  lockin_unit: V
+  scan_type: line
+  outer: frequency
+  outer_values: [500.0, 1000.0, 2000.0, 4000.0, 8000.0]
+
+Per line, chopping frequency (lock-in settings read from the front panels; for power / frequency also the value really reached):
+  line0: {"angle_deg": -0.0037748474213371297, "bias_V": NaN, "chop_frequency_Hz": 500.0, "frequency_set": 500.0, "laser_over_range_end": false, "laser_over_range_start": false, "laser_power_on_sample_uW_end": 89.30343243904174, "laser_power_on_sample_uW_start": 89.63263239305869, "laser_power_uW_end": 89.30343243904174, "laser_power_uW_start": 89.63263239305869, "laser_range_uW_end": 1000.0, "laser_range_uW_start": 1000.0, "laser_wavelength_nm": 532, "meter_to_sample_ratio": 1.0, "note": "line scan: images have 1 row; columns follow the line from start to end (distance_um)", "outer_parameter": "Chopping frequency (Hz)", "outer_value": 500.0, "overload_lines": 0, "reference_locked": true, "sens_pc": 1e-08, "sens_refl": 0.1, "tau_pc_s": 0.001, "tau_refl_s": 0.001, "wait_s": 0.007}
+  line1: {"angle_deg": -0.0037748474213371297, "bias_V": NaN, "chop_frequency_Hz": 1000.0, "frequency_set": 1000.0, "laser_over_range_end": false, "laser_over_range_start": false, "laser_power_on_sample_uW_end": 89.40976264512709, "laser_power_on_sample_uW_start": 89.40960027209893, "laser_power_uW_end": 89.40976264512709, "laser_power_uW_start": 89.40960027209893, "laser_range_uW_end": 1000.0, "laser_range_uW_start": 1000.0, "laser_wavelength_nm": 532, "meter_to_sample_ratio": 1.0, "note": "line scan: images have 1 row; columns follow the line from start to end (distance_um)", "outer_parameter": "Chopping frequency (Hz)", "outer_value": 1000.0, "overload_lines": 0, "reference_locked": true, "sens_pc": 1e-08, "sens_refl": 0.1, "tau_pc_s": 0.001, "tau_refl_s": 0.001, "wait_s": 0.007}
+  line2: {"angle_deg": -0.0037748474213371297, "bias_V": NaN, "chop_frequency_Hz": 2000.0, "frequency_set": 2000.0, "laser_over_range_end": false, "laser_over_range_start": false, "laser_power_on_sample_uW_end": 89.25674230935944, "laser_power_on_sample_uW_start": 89.32889436284391, "laser_power_uW_end": 89.25674230935944, "laser_power_uW_start": 89.32889436284391, "laser_range_uW_end": 1000.0, "laser_range_uW_start": 1000.0, "laser_wavelength_nm": 532, "meter_to_sample_ratio": 1.0, "note": "line scan: images have 1 row; columns follow the line from start to end (distance_um)", "outer_parameter": "Chopping frequency (Hz)", "outer_value": 2000.0, "overload_lines": 0, "reference_locked": true, "sens_pc": 1e-08, "sens_refl": 0.1, "tau_pc_s": 0.001, "tau_refl_s": 0.001, "wait_s": 0.007}
+  line3: {"angle_deg": -0.0037748474213371297, "bias_V": NaN, "chop_frequency_Hz": 4000.0, "frequency_set": 4000.0, "laser_over_range_end": false, "laser_over_range_start": false, "laser_power_on_sample_uW_end": 88.71696985387784, "laser_power_on_sample_uW_start": 88.65301639281913, "laser_power_uW_end": 88.71696985387784, "laser_power_uW_start": 88.65301639281913, "laser_range_uW_end": 1000.0, "laser_range_uW_start": 1000.0, "laser_wavelength_nm": 532, "meter_to_sample_ratio": 1.0, "note": "line scan: images have 1 row; columns follow the line from start to end (distance_um)", "outer_parameter": "Chopping frequency (Hz)", "outer_value": 4000.0, "overload_lines": 0, "reference_locked": true, "sens_pc": 1e-08, "sens_refl": 0.1, "tau_pc_s": 0.001, "tau_refl_s": 0.001, "wait_s": 0.007}
+  line4: {"angle_deg": -0.0037748474213371297, "bias_V": NaN, "chop_frequency_Hz": 8000.0, "frequency_set": 8000.0, "laser_over_range_end": false, "laser_over_range_start": false, "laser_power_on_sample_uW_end": 88.46755105219398, "laser_power_on_sample_uW_start": 88.95374571042915, "laser_power_uW_end": 88.46755105219398, "laser_power_uW_start": 88.95374571042915, "laser_range_uW_end": 1000.0, "laser_range_uW_start": 1000.0, "laser_wavelength_nm": 532, "meter_to_sample_ratio": 1.0, "note": "line scan: images have 1 row; columns follow the line from start to end (distance_um)", "outer_parameter": "Chopping frequency (Hz)", "outer_value": 8000.0, "overload_lines": 0, "reference_locked": true, "sens_pc": 1e-08, "sens_refl": 0.1, "tau_pc_s": 0.001, "tau_refl_s": 0.001, "wait_s": 0.007}
+
+Instruments: {"stage": "Simulated Tango", "lockin_photocurrent": "Simulated SR830 (photocurrent)", "lockin_reflection": "Simulated SR830 (reflection)", "bias": "Simulated bias", "accessories": {"powermeter": "Simulated PM100USB", "camera": "Simulated CS165CU"}, "simulated": true}

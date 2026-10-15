@@ -1,0 +1,52 @@
+Sample: selftest_map
+Started: 2026-10-15T12:48:54
+Completed: True
+Photocurrent conversion: raw × √2 × 1 µA/V (SR570) = peak (amplitude) [A]
+
+Experiment:
+
+Notes:
+
+
+Scan settings:
+  x_center: -8
+  y_center: -6
+  origin: corner
+  origin_x: 0
+  origin_y: 0
+  flip_x: False
+  flip_y: False
+  angle_deg: 0.0
+  x_dir: 1
+  y_dir: 1
+  x_size: 16
+  y_size: 12
+  step: 1.0
+  serpentine: False
+  settle_tc: 3.0
+  settle_auto: True
+  backlash_um: 1.0
+  extra_settle_ms: 0.0
+  biases: [0.0, 0.5]
+  sample: selftest_map
+  power_lock: False
+  target_power_uW: None
+  power_tol_pct: 1.0
+  mode: step
+  amp_mode: sr570
+  amp_value: 1e-06
+  signal_as: peak
+  lockin_unit: V
+  scan_type: map
+  outer: bias
+  outer_values: []
+
+Per map (lock-in settings read from the front panels):
+  map0: {"angle_deg": 0.0, "bias_V": 0.0, "laser_over_range_end": false, "laser_over_range_start": false, "laser_power_on_sample_uW_end": 99.99368215911895, "laser_power_on_sample_uW_start": 100.04052768789413, "laser_power_uW_end": 99.99368215911895, "laser_power_uW_start": 100.04052768789413, "laser_range_uW_end": 1000.0, "laser_range_uW_start": 1000.0, "laser_wavelength_nm": 532, "meter_to_sample_ratio": 1.0, "outer_parameter": "Bias (V)", "outer_value": 0.0, "overload_lines": 0, "sens_pc": 1e-08, "sens_refl": 0.1, "tau_pc_s": 0.001, "tau_refl_s": 0.001, "wait_s": 0.007}
+  map1: {"angle_deg": 0.0, "bias_V": 0.5, "laser_over_range_end": false, "laser_over_range_start": false, "laser_power_on_sample_uW_end": 100.39497754961074, "laser_power_on_sample_uW_start": 100.21031204351117, "laser_power_uW_end": 100.39497754961074, "laser_power_uW_start": 100.21031204351117, "laser_range_uW_end": 1000.0, "laser_range_uW_start": 1000.0, "laser_wavelength_nm": 532, "meter_to_sample_ratio": 1.0, "outer_parameter": "Bias (V)", "outer_value": 0.5, "overload_lines": 0, "sens_pc": 1e-08, "sens_refl": 0.1, "tau_pc_s": 0.001, "tau_refl_s": 0.001, "wait_s": 0.007}
+  map0/powermeter/end: over_range=False, power_on_sample_uW=99.99, power_uW=99.99, range_uW=1000
+  map0/powermeter/start: over_range=False, power_on_sample_uW=100, power_uW=100, range_uW=1000
+  map1/powermeter/end: over_range=False, power_on_sample_uW=100.4, power_uW=100.4, range_uW=1000
+  map1/powermeter/start: over_range=False, power_on_sample_uW=100.2, power_uW=100.2, range_uW=1000
+
+Instruments: {"stage": "Simulated Tango", "lockin_photocurrent": "Simulated SR830 (photocurrent)", "lockin_reflection": "Simulated SR830 (reflection)", "bias": "Simulated bias", "accessories": {"powermeter": "Simulated PM100USB", "camera": "Simulated CS165CU"}, "simulated": true}

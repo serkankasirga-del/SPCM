@@ -1,0 +1,20 @@
+ok    parse lists  (0.5 s)
+ok    map scan, step mode (+ bias), save/load/CSV/figure  (11.2 s)
+ok    map scan, fly mode  (1.8 s)
+ok    point sweeps: power, bias, bias x power  (53.0 s)
+ok    line scan (+ bias), save/load/CSV/figure  (1.9 s)
+ok    line scans stepping laser power and chopping frequency  (15.1 s)
+      simulated electrode edge: FWHM = 986 ± 39 nm (edge at 1.20 µm along the line)
+ok    resolution from an edge (FWHM of the derivative)  (9.3 s)
+      0.1205 µm/px, residual 0.09 px
+ok    camera calibration (simulated)  (2.5 s)
+      window 1600 x 950, smallest possible 1202 x 450
+         1202  QWidget  
+          748  QTabWidget  
+          744  QWidget  
+          744  QStackedWidget  
+          736  QWidget  
+      frame from camera: start (9.63, 7.25), 19.27 x 14.50 µm
+ok    main window off-screen (screenshots)  (55.8 s)
+
+All tests passed. Output in D:\a\SPCM\SPCM\selftest_out
