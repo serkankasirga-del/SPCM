@@ -135,6 +135,63 @@ if HAVE_LINES:
         linescan.save_all(d)
 
 
+    @check("line scans stepping laser power and chopping frequency")
+    def _():
+        import linescan
+        from scanner import ScanWorker, load
+        li = HW.lockin_pc
+        f0, a0 = li.frequency(), li.sine_amplitude()
+        for outer, vals in (("power", [10, 20, 40, 80]), ("frequency", [500, 2000, 8000])):
+            s = linescan.line_settings((-8, -3), (8, 4), 0.5, outer=outer, values=vals,
+                                       origin=(0, 0), sample=f"selftest_line_{outer}")
+            d = load(run_worker(ScanWorker(HW, s, OUT)))
+            assert d.settings.outer_list() == vals and d.pc.shape[0] == len(vals)
+            assert np.isfinite(d.pc).all()
+            peak = np.nanmax(np.abs(d.pc[:, 0, :, 0]), axis=1)
+            if outer == "power":
+                got = [m["laser_power_reached_uW"] for m in d.map_info]
+                assert np.allclose(got, vals, rtol=0.05), got
+                assert np.all(np.diff(peak) > 0), "signal should grow with power"
+            else:
+                got = [m["chop_frequency_Hz"] for m in d.map_info]
+                assert np.allclose(got, vals), got
+                assert peak[-1] < 0.6 * peak[0], "simulated roll-off not seen"
+            linescan.export_csv(d)
+            linescan.save_all(d)
+        assert li.frequency() == f0, "chopping frequency not restored"
+        assert abs(li.sine_amplitude() - a0) < 0.003, "SINE OUT not restored"
+
+
+@check("resolution from an edge (FWHM of the derivative)")
+def _():
+    import math
+    import resolution
+    rng = np.random.default_rng(0)
+    for fwhm, step in ((0.4, 0.05), (0.8, 0.1)):
+        xs, ys = np.arange(-3, 3.0001, step), np.arange(-1, 1.0001, step)
+        X, _Y = np.meshgrid(xs, ys)
+        sig = fwhm / resolution.FWHM_PER_SIGMA
+        erf = np.vectorize(math.erf)
+        img = 0.02 + 0.03 * 0.5 * (1 + erf((X - 1) / (sig * np.sqrt(2))))
+        img += rng.normal(0, 2e-4, img.shape)
+        for p0, p1 in (((-1, 0.2), (3, 0.3)), ((3, -0.3), (-1, 0.1))):  # rising, falling
+            r = resolution.analyse(img, xs, ys, p0, p1, step)
+            assert r["fit"] and abs(r["fwhm_um"] / fwhm - 1) < 0.08, r["message"]
+    flat = 0.03 + rng.normal(0, 2e-4, (41, 121))
+    r = resolution.analyse(flat, np.arange(-3, 3.0001, 0.05), np.arange(-1, 1.0001, 0.05),
+                           (-1, 0), (3, 0), 0.05)
+    assert r["fit"] is None, "found an edge in noise"
+    # on a simulated map across the gold electrode edge
+    from scanner import ScanSettings, ScanWorker, load
+    s = ScanSettings(x_center=3.5, y_center=-1, x_size=3, y_size=2, step=0.1,
+                     serpentine=False, origin_x=0, origin_y=0, sample="selftest_edge")
+    d = load(run_worker(ScanWorker(HW, s, OUT)))
+    r = resolution.analyse(d.refl[0, :, :, 2], d.xs, d.ys, (3.8, 0), (6.2, 0), 0.1)
+    print(f"      simulated electrode edge: {r['message']}")
+    assert r["fit"] and 0.8 < r["fwhm_um"] < 1.3
+    resolution.export(r, os.path.join(OUT, "selftest_resolution"), "selftest")
+
+
 @check("camera calibration (simulated)")
 def _():
     try:
@@ -212,10 +269,16 @@ if HAVE_QT:
         assert w.thread is None, "map scan did not finish"
         shot("map")
         # line drawn on the map, with a bias list
+        # resolution tool on the reflection map
+        w.res_btn.setChecked(True)
+        pump(0.5)
+        assert w.res_view is not None and w.res_view.res is not None
+        w.res_view.grab().save(os.path.join(OUT, "screen_resolution_window.png"))
+        w.res_btn.setChecked(False)
         w.line_btn.setChecked(True)
         w.amp_mode.setCurrentIndex(w.amp_mode.findData("sr570"))
-        w.bias_on.setChecked(True)
-        w.bias_txt.setText("-0.5, 0, 0.5")
+        w.ln_param.setCurrentIndex(w.ln_param.findData("bias"))
+        w.ln_values.setText("-0.5, 0, 0.5")
         shot("map_with_line")
         w.scan_line()
         t0 = time.time()
@@ -223,8 +286,9 @@ if HAVE_QT:
             pump(0.2)
         assert w.thread is None, "line scan did not finish"
         assert w.line_data is not None and np.isfinite(w.line_data.pc).all()
+        assert w.line_data.pc.shape[0] == 3
         shot("line")
-        w.bias_on.setChecked(False)
+        w.ln_param.setCurrentIndex(w.ln_param.findData("none"))
         w.tabs.setCurrentIndex(0)
         # point sweep
         w.side_tabs.setCurrentIndex(1)
@@ -277,6 +341,18 @@ if HAVE_QT:
                 pump(0.2)
             assert w.line_data is not None
             shot("line_from_camera")
+            # line drawn on the camera, chopping frequency changed from line to line
+            w.tabs.setCurrentWidget(w.cam_tab)
+            w.ln_param.setCurrentIndex(w.ln_param.findData("frequency"))
+            w.ln_values.setText("500:8k:*2")
+            w.use_cam_line()
+            t0 = time.time()
+            while w.thread is not None and time.time() - t0 < 120:
+                pump(0.2)
+            d = w.line_data
+            assert d.settings.outer == "frequency" and d.pc.shape[0] == 5
+            assert np.isfinite(d.pc).all()
+            shot("line_from_camera_vs_frequency")
         w._hw_closed = True          # keep the simulated hardware for later tests
         w.close()
 
